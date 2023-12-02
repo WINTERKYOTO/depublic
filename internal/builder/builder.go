@@ -1,89 +1,55 @@
 package builder
 
 import (
-	"fmt"
+	"depublic/entity"
 
-	"github.com/depublic/depublic/internal/config"
-	"github.com/depublic/depublic/internal/repository"
-	"github.com/jinzhu/gorm"
-	"log"
+	"gorm.io/gorm"
 )
 
-// Build builds the entire database, including schema and seed data.
-func Build(config *config.Config) error {
-	log.Println("Building database...")
-
-	// Create the database
-	if err := createDatabase(config); err != nil {
-		return fmt.Errorf("failed to create database: %w", err)
-	}
-
-	// Create the tables
-	if err := createTables(config); err != nil {
-		return fmt.Errorf("failed to create tables: %w", err)
-	}
-
-	// Seed the data
-	if err := seedData(config); err != nil {
-		return fmt.Errorf("failed to seed data: %w", err)
-	}
-
-	log.Println("Database build successfully completed.")
-	return nil
+// UserBuilder is a builder for the `User` entity
+type UserBuilder struct {
+	db *gorm.DB
 }
 
-// createDatabase creates the database if it does not already exist.
-func createDatabase(config *config.Config) error {
-	// Get the database configuration
-	config := config.Database
-
-	// Connect to the database
-	db, err := repository.NewDatabase(config)
-	if err != nil {
-		return fmt.Errorf("failed to connect to database: %w", err)
-	}
-	defer db.Close()
-
-	// Create the database
-	_, err = db.Exec("CREATE DATABASE IF NOT EXISTS `depublic`")
-	if err != nil {
-		return fmt.Errorf("failed to create database: %w", err)
-	}
-
-	return nil
+// NewUserBuilder creates a new `UserBuilder`
+func NewUserBuilder(db *gorm.DB) *UserBuilder {
+	return &UserBuilder{db}
 }
 
-// createTables creates the tables in the database.
-func createTables(config *config.Config) error {
-	// Get the database configuration
-	config := config.Database
-
-	// Connect to the database
-	db, err := repository.NewDatabase(config)
-	if err != nil {
-		return fmt.Errorf("failed to connect to database: %w", err)
-	}
-	defer db.Close()
-
-	// Create the tables
-	err = db.AutoMigrate(&entity.Product{}, &entity.User{}, &entity.Transaction{})
-	if err != nil {
-		return fmt.Errorf("failed to migrate database schema: %w", err)
-	}
-
-	return nil
+// WithUsername sets the `Username` field
+func (b *UserBuilder) WithUsername(username string) *UserBuilder {
+	b.db.Where("username = ?", username)
+	return b
 }
 
-// seedData seeds initial data into the database.
-func seedData(config *config.Config) error {
-	// Get the database configuration
-	config := config.Database
+// WithPassword sets the `Password` field
+func (b *UserBuilder) WithPassword(password string) *UserBuilder {
+	b.db.Where("password = ?", password)
+	return b
+}
 
-	// Connect to the database
-	db, err := repository.NewDatabase(config)
-	if err != nil {
-		return fmt.Errorf("failed to connect to database: %w", err)
+// WithRole sets the `Role` field
+func (b *UserBuilder) WithRole(role string) *UserBuilder {
+	b.db.Where("role = ?", role)
+	return b
+}
+
+// FindAll finds all users that match the given criteria
+func (b *UserBuilder) FindAll() ([]*entity.User, error) {
+	var users []*entity.User
+	result := b.db.Find(&users)
+	if result.Error != nil {
+		return nil, result.Error
 	}
-	defer db.Close()
+	return users, nil
+}
 
-	// Seed products
+// FindOne finds the first user that matches the given criteria
+func (b *UserBuilder) FindOne() (*entity.User, error) {
+	var user *entity.User
+	result := b.db.First(&user)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return user, nil
+}

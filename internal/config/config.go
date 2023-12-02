@@ -3,52 +3,41 @@ package config
 import (
 	"fmt"
 	"log"
+	"os"
 
-	"github.com/spf13/viper"
+	"github.com/joho/godotenv"
 )
 
+// Config represents the configuration for the application
 type Config struct {
-	Port      string         `mapstructure:"port"`
-	Database  DatabaseConfig `mapstructure:"database"`
-	JWTSecret string         `mapstructure:"jwt_secret"`
-	SendGrid  SendGridConfig `mapstructure:"sendgrid"`
+	Database struct {
+		DSN string
+	}
+	Server struct {
+		Port string
+	}
 }
 
-type DatabaseConfig struct {
-	Host     string `mapstructure:"host"`
-	Port     string `mapstructure:"port"`
-	Name     string `mapstructure:"name"`
-	User     string `mapstructure:"user"`
-	Password string `mapstructure:"password"`
-}
-
-type SendGridConfig struct {
-	ApiKey string `mapstructure:"api_key"`
-}
-
-func LoadConfig() (*Config, error) {
-	viper.SetConfigName("config")
-	viper.AddConfigPath(".")
-
-	if err := viper.ReadInConfig(); err != nil {
-		return nil, fmt.Errorf("failed to load config file: %w", err)
+// Load loads the configuration from the `.env` file
+func Load() (*Config, error) {
+	err := godotenv.Load()
+	if err != nil {
+		return nil, err
 	}
 
-	var config Config
-	if err := viper.Unmarshal(&config); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
-	}
+	cfg := &Config{}
 
-	log.Println("[Config] Loaded configuration:")
-	log.Printf("  Port: %s\n", config.Port)
-	log.Printf("  Database:\n")
-	log.Printf("    Host: %s\n", config.Database.Host)
-	log.Printf("    Port: %s\n", config.Database.Port)
-	log.Printf("    Name: %s\n", config.Database.Name)
-	log.Printf("    User: %s\n", config.Database.User)
-	log.Printf("  JWTSecret: %s\n", config.JWTSecret)
-	log.Printf("  SendGrid:\n")
-	log.Printf("    API Key: %s\n", config.SendGrid.ApiKey)
+	// Database configuration
+	cfg.Database.DSN = fmt.Sprintf("host=%s user=%s password=%s dbname=%s sslmode=disable",
+		os.Getenv("DATABASE_HOST"),
+		os.Getenv("DATABASE_USER"),
+		os.Getenv("DATABASE_PASSWORD"),
+		os.Getenv("DATABASE_NAME"),
+	)
 
-	return &config, nil
+	// Server configuration
+	cfg.Server.Port = os.Getenv("PORT")
+
+	log.Println("Loaded configuration")
+	return cfg, nil
 }

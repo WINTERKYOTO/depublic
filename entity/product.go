@@ -1,14 +1,14 @@
 package entity
 
-import (
-	"time"
-)
+import "time"
 
+// Product represents a product in the system
 type Product struct {
-	ID          uint64    `json:"id" gorm:"primaryKey"`
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	Price       float64   `json:"price"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID          uint64 `gorm:"primary_key"`
+	Name        string `gorm:"unique"`
+	Description string
+	Price       int
+	Quantity    int
+	CreatedAt   time.Time `gorm:"auto_created_at"`
+	UpdatedAt   time.Time `gorm:"auto_updated_at"`
 }

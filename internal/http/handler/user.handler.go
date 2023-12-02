@@ -1,106 +1,100 @@
 package handler
 
 import (
-	"context"
-	"encoding/json"
-	"fmt"
-	"net/http"
+	"depublic/entity"
+	"depublic/service"
+	"strconv"
 
-	"github.com/depublic/depublic/internal/config"
-	"github.com/depublic/depublic/internal/repository"
-	"github.com/depublic/depublic/internal/util"
-	"github.com/dgrijalva/jwt-go"
+	"github.com/labstack/echo/v4"
 )
 
-// UserHandler is a struct that holds the handlers for user-related requests.
-type UserHandler struct {
-	config *config.Config
-	repo   repository.Repository
+// UserController adalah handler untuk endpoint '/users'
+type UserController struct {
+	service service.UserService
 }
 
-// NewUserHandler returns a new UserHandler instance.
-func NewUserHandler(config *config.Config, repo repository.Repository) *UserHandler {
-	return &UserHandler{
-		config: config,
-		repo:   repo,
-	}
+// NewUserController membuat `UserController` baru
+func NewUserController(service service.UserService) *UserController {
+	return &UserController{service}
 }
 
-// GetUserHandler handles the `GET /users/:id` request.
-func (h *UserHandler) GetUserHandler(w http.ResponseWriter, r *http.Request) {
-	// Validate the request path
-	userID := util.ParseUint(r.URL.PathParam("id"))
-	if userID == 0 {
-		util.Error(w, http.StatusBadRequest, "Invalid user ID")
-		return
-	}
-
-	// Get the user
-	user, err := h.repo.GetUser(userID)
+// GetAll menangani endpoint 'GET /users'
+func (c *UserController) GetAll(ctx echo.Context) error {
+	// Dapatkan semua pengguna
+	users, err := c.service.GetAll()
 	if err != nil {
-		if err == repository.ErrNotFound {
-			util.Error(w, http.StatusNotFound, "User not found")
-		} else {
-			util.Error(w, http.StatusInternalServerError, "Failed to get user: %v", err)
-		}
-		return
+		return err
 	}
 
-	// Return the user
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(user)
+	// Respon dengan daftar pengguna
+	return ctx.JSON(200, users)
 }
 
-// UpdateUserHandler handles the `PUT /users/:id` request.
-func (h *UserHandler) UpdateUserHandler(w http.ResponseWriter, r *http.Request) {
-	// Validate the request path
-	userID := util.ParseUint(r.URL.PathParam("id"))
-	if userID == 0 {
-		util.Error(w, http.StatusBadRequest, "Invalid user ID")
-		return
-	}
+// GetByID menangani endpoint 'GET /users/:id'
+func (c *UserController) GetByID(ctx echo.Context) error {
+	// Dapatkan ID pengguna dari path sebagai string
+	userID := ctx.Param("id")
 
-	// Validate the request body
-	var updateRequest struct {
-		FullName string `json:"full_name"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&updateRequest); err != nil {
-		util.Error(w, http.StatusBadRequest, "Invalid request body: %v", err)
-		return
-	}
-
-	// Get the user
-	user, err := h.repo.GetUser(userID)
+	// Konversi userID dari string ke uint64 (jika dibutuhkan)
+	userIDUint, err := strconv.ParseUint(userID, 10, 64)
 	if err != nil {
-		if err == repository.ErrNotFound {
-			util.Error(w, http.StatusNotFound, "User not found")
-		} else {
-			util.Error(w, http.StatusInternalServerError, "Failed to get user: %v", err)
-		}
-		return
+		return err // Tindakan yang sesuai jika konversi gagal
 	}
 
-	// Update the user
-	user.FullName = updateRequest.FullName
-	if err := h.repo.UpdateUser(user); err != nil {
-		util.Error(w, http.StatusInternalServerError, "Failed to update user: %v", err)
-		return
+	// Dapatkan pengguna berdasarkan ID yang diharapkan dalam tipe string
+	user, err := c.service.GetByID(strconv.FormatUint(userIDUint, 10))
+	if err != nil {
+		return err
 	}
 
-	// Return the updated user
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(user)
+	// Respon dengan pengguna yang didapatkan
+	return ctx.JSON(200, user)
 }
 
-// DeleteUserHandler handles the `DELETE /users/:id` request.
-func (h *UserHandler) DeleteUserHandler(w http.ResponseWriter, r *http.Request) {
-	// Validate the request path
-	userID := util.ParseUint(r.URL.PathParam("id"))
-	if userID == 0 {
-		util.Error(w, http.StatusBadRequest, "Invalid user ID")
-		return
+// Create menangani endpoint 'POST /users'
+func (c *UserController) Create(ctx echo.Context) error {
+	// Bind request
+	user := new(entity.User)
+	if err := ctx.Bind(user); err != nil {
+		return err
 	}
 
-	// Delete the user
-	if err := h.repo.DeleteUser(userID); err != nil {
-	
+	// Buat pengguna baru
+	err := c.service.Create(user)
+	if err != nil {
+		return err
+	}
+
+	// Respon dengan pengguna yang telah dibuat
+	return ctx.JSON(201, user)
+}
+
+// Update menangani endpoint 'PUT /users/:id'
+func (c *UserController) Update(ctx echo.Context) error {
+	// Dapatkan ID pengguna dari path sebagai string
+	userID := ctx.Param("id")
+
+	// Konversi userID dari string ke uint64 (jika dibutuhkan)
+	userIDUint, err := strconv.ParseUint(userID, 10, 64)
+	if err != nil {
+		return err // Tindakan yang sesuai jika konversi gagal
+	}
+
+	// Bind request
+	user := new(entity.User)
+	if err := ctx.Bind(user); err != nil {
+		return err
+	}
+
+	// Setel ID pengguna ke dalam entitas user
+	user.ID = userIDUint
+
+	// Lakukan pembaruan pengguna menggunakan entitas user
+	err = c.service.Update(user)
+	if err != nil {
+		return err
+	}
+
+	// Respon dengan pengguna yang telah diperbarui
+	return ctx.JSON(200, user)
+}

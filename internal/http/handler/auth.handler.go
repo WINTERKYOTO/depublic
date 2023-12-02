@@ -1,102 +1,52 @@
 package handler
 
 import (
-	"context"
-	"encoding/json"
-	"fmt"
-	"net/http"
+	"depublic/common"
+	"depublic/service"
 
-	"github.com/depublic/depublic/internal/config"
-	"github.com/depublic/depublic/internal/repository"
-	"github.com/depublic/depublic/internal/util"
-	"github.com/dgrijalva/jwt-go"
+	"github.com/labstack/echo/v4"
 )
 
-// AuthHandler is a struct that holds the handlers for authentication-related requests.
-type AuthHandler struct {
-	config *config.Config
-	repo   repository.Repository
+// AuthController is the handler for the `/auth` endpoints
+type AuthController struct {
+	service service.AuthService
 }
 
-// NewAuthHandler returns a new AuthHandler instance.
-func NewAuthHandler(config *config.Config, repo repository.Repository) *AuthHandler {
-	return &AuthHandler{
-		config: config,
-		repo:   repo,
-	}
+// NewAuthController creates a new `AuthController`
+func NewAuthController(service service.AuthService) *AuthController {
+	return &AuthController{service}
 }
 
-// LoginHandler handles the `POST /auth/login` request.
-func (h *AuthHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
-	// Validate the request body
-	var loginRequest struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&loginRequest); err != nil {
-		util.Error(w, http.StatusBadRequest, "Invalid request body: %v", err)
-		return
+// Define the BindUser function
+func BindUser(ctx echo.Context) (*common.User, error) {
+	user := new(common.User)
+	if err := ctx.Bind(user); err != nil {
+		return nil, err
 	}
 
-	// Check if the user exists
-	user, err := h.repo.GetUserByEmail(loginRequest.Email)
-	if err != nil {
-		if err == repository.ErrNotFound {
-			util.Error(w, http.StatusBadRequest, "User not found")
-		} else {
-			util.Error(w, http.StatusInternalServerError, "Failed to get user: %v", err)
-		}
-		return
-	}
-
-	// Check if the password is correct
-	if !util.CheckPassword(loginRequest.Password, user.Password) {
-		util.Error(w, http.StatusUnauthorized, "Invalid password")
-		return
-	}
-
-	// Generate a JWT token
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.Claims{
-		Subject: user.ID,
-		Issuer:  h.config.JWTIssuer,
-		ExpiresAt: time.Now().Add(time.Hour * 24),
-	})
-	tokenString, err := token.SignedString([]byte(h.config.JWTSecret))
-	if err != nil {
-		util.Error(w, http.StatusInternalServerError, "Failed to generate JWT token: %v", err)
-		return
-	}
-
-	// Return the JWT token
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(struct {
-		Token string `json:"token"`
-	}{
-		Token: tokenString,
-	})
+	return user, nil
 }
 
-// RegisterHandler handles the `POST /auth/register` request.
-func (h *AuthHandler) RegisterHandler(w http.ResponseWriter, r *http.Request) {
-	// Validate the request body
-	var registerRequest struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
-		FullName string `json:"full_name"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&registerRequest); err != nil {
-		util.Error(w, http.StatusBadRequest, "Invalid request body: %v", err)
-		return
+// Login handles the `POST /auth/login` endpoint
+func (c *AuthController) Login(ctx echo.Context) error {
+	// Bind the request
+	user := new(common.User)
+	if err := ctx.Bind(user); err != nil {
+		return err
 	}
 
-	// Check if the email is already in use
-	if _, err := h.repo.GetUserByEmail(registerRequest.Email); err == nil {
-		util.Error(w, http.StatusBadRequest, "Email already in use")
-		return
-	}
-
-	// Hash the password
-	hashedPassword, err := util.HashPassword(registerRequest.Password)
+	// Authenticate the user
+	claims, err := c.service.Authenticate(user.Username, user.Password)
 	if err != nil {
-		util.Error(w, http.StatusInternalServerError, "Failed to hash password: %v", err)
-	
+		return err
+	}
+
+	// Generate a token
+	token, err := common.GenerateToken(claims)
+	if err != nil {
+		return err
+	}
+
+	// Respond with the token
+	return ctx.JSON(200, echo.Map{"token": token})
+}

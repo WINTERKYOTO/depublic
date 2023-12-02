@@ -1,50 +1,37 @@
 package main
 
 import (
-	"fmt"
-	"log"
-	"net/http"
+	"database/sql"
+	"depublic/internal/config"
+	"depublic/internal/http/handler" // Pastikan path sesuai dengan struktur proyek Anda
 
-	"github.com/depublic/depublic/internal/config"
-	"github.com/depublic/depublic/internal/http/handler"
-	"github.com/depublic/depublic/repository"
-	"github.com/depublic/depublic/service"
-	"github.com/gorilla/mux"
+	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 )
 
 func main() {
-	// Load the configuration
-	config, err := config.LoadConfig()
+	// Load configuration
+	cfg, err := config.Load()
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 
-	// Initialize the database
-	db, err := repository.NewDatabase(config.Database)
+	// Connect to database
+	db, err := sql.Open("postgres", cfg.Database.DSN)
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 
-	// Create the repositories
-	productRepository := repository.NewProductRepository(db)
+	// Create Echo instance
+	e := echo.New()
 
-	// Create the services
-	productService := service.NewProductService(productRepository)
+	// Middleware
+	e.Use(middleware.Logger())
+	e.Use(middleware.Recover())
 
-	// Create the handlers
-	productHandler := handler.NewProductHandler(productService)
+	// Register routes
+	handler.RegisterRoutes(e, db) // Panggil RegisterRoutes dengan parameter yang sesuai
 
-	// Create the router
-	router := mux.NewRouter()
-
-	// Register the routes
-	router.HandleFunc("/products", productHandler.GetProducts).Methods("GET")
-	router.HandleFunc("/products/{id}", productHandler.GetProduct).Methods("GET")
-	router.HandleFunc("/products", productHandler.CreateProduct).Methods("POST")
-	router.HandleFunc("/products/{id}", productHandler.UpdateProduct).Methods("PUT")
-	router.HandleFunc("/products/{id}", productHandler.DeleteProduct).Methods("DELETE")
-
-	// Start the server
-	log.Println("Starting server...")
-	http.ListenAndServe(fmt.Sprintf(":%s", config.Port), router)
+	// Start server
+	e.Logger.Fatal(e.Start(cfg.Server.Port))
 }

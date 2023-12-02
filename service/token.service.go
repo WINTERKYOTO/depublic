@@ -1,27 +1,30 @@
 package service
 
 import (
-	"errors"
-
-	"github.com/dgrijalva/jwt-go"
+	"depublic/common"
+	"depublic/entity"
 )
 
-// TokenService is a struct that holds the handlers for token-related requests.
-type TokenService struct {
-	config *config.Config
+type TokenService struct{}
+
+func NewTokenService() *TokenService {
+	return &TokenService{}
 }
 
-// NewTokenService returns a new TokenService instance.
-func NewTokenService(config *config.Config) *TokenService {
-	return &TokenService{
-		config: config,
-	}
-}
-
-// ParseToken parses a JWT token.
-func (s *TokenService) ParseToken(tokenString string) (*jwt.Token, error) {
-	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		return []byte(s.config.JWTSecret), nil
-	})
+func (s *TokenService) GenerateToken(claims *entity.JWTClaims) (string, error) {
+	token, err := common.GenerateToken(claims)
 	if err != nil {
-		
+		return "", err
+	}
+
+	return token, nil
+}
+
+func (s *TokenService) ValidateToken(tokenString string) (*entity.JWTClaims, error) {
+	claims, err := common.ValidateToken(tokenString)
+	if err != nil {
+		return nil, err
+	}
+
+	return claims, nil
+}

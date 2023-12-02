@@ -1,122 +1,72 @@
 package repository
 
 import (
-	"context"
-	"database/sql"
-	"errors"
+	"depublic/entity"
 	"fmt"
+
+	"github.com/jinzhu/gorm"
 )
 
-// UserRepository is an interface that defines methods for interacting with users in a database.
+// UserRepository is the interface for interacting with users in the repository
 type UserRepository interface {
-	GetUser(ctx context.Context, userID uint64) (*User, error)
-	GetUserByEmail(ctx context.Context, email string) (*User, error)
-	CreateUser(ctx context.Context, user *User) error
-	UpdateUser(ctx context.Context, user *User) error
-	DeleteUser(ctx context.Context, userID uint64) error
+	GetAll() ([]*entity.User, error)
+	GetByID(userID string) (*entity.User, error)
+	Create(user *entity.User) error
+	Update(user *entity.User) error
+	Delete(userID string) error
 }
 
-// UserRepositoryImpl is a concrete implementation of the UserRepository interface.
+// UserRepositoryImpl is the implementation of the `UserRepository` interface
 type UserRepositoryImpl struct {
-	db *sql.DB
+	db *gorm.DB
 }
 
-// NewUserRepositoryImpl returns a new UserRepositoryImpl instance.
-func NewUserRepositoryImpl(db *sql.DB) *UserRepositoryImpl {
-	return &UserRepositoryImpl{
-		db: db,
+// NewUserRepositoryImpl creates a new `UserRepositoryImpl`
+func NewUserRepositoryImpl(db *gorm.DB) *UserRepositoryImpl {
+	return &UserRepositoryImpl{db}
+}
+
+// GetAll gets all users from the database
+func (r *UserRepositoryImpl) GetAll() ([]*entity.User, error) {
+	var users []*entity.User
+	if err := r.db.Find(&users).Error; err != nil {
+		return nil, err
 	}
+	return users, nil
 }
 
-// GetUser gets a user by ID.
-func (repo *UserRepositoryImpl) GetUser(ctx context.Context, userID uint64) (*User, error) {
-	query := `
-		SELECT id, email, full_name, created_at, updated_at
-		FROM users
-		WHERE id = $1
-	`
-
-	var user User
-	err := repo.db.QueryRowContext(ctx, query, userID).Scan(&user.ID, &user.Email, &user.FullName, &user.CreatedAt, &user.UpdatedAt)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, ErrNotFound
+// GetByID gets a user by ID from the database
+func (r *UserRepositoryImpl) GetByID(userID string) (*entity.User, error) {
+	var user entity.User
+	if err := r.db.First(&user, "id = ?", userID).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, fmt.Errorf("user with ID %s not found", userID)
 		}
-		return nil, fmt.Errorf("failed to get user: %w", err)
+		return nil, err
 	}
-
 	return &user, nil
 }
 
-// GetUserByEmail gets a user by email.
-func (repo *UserRepositoryImpl) GetUserByEmail(ctx context.Context, email string) (*User, error) {
-	query := `
-		SELECT id, email, full_name, created_at, updated_at
-		FROM users
-		WHERE email = $1
-	`
-
-	var user User
-	err := repo.db.QueryRowContext(ctx, query, email).Scan(&user.ID, &user.Email, &user.FullName, &user.CreatedAt, &user.UpdatedAt)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, ErrNotFound
-		}
-		return nil, fmt.Errorf("failed to get user by email: %w", err)
+// Create creates a new user in the database
+func (r *UserRepositoryImpl) Create(user *entity.User) error {
+	if err := r.db.Create(user).Error; err != nil {
+		return err
 	}
-
-	return &user, nil
-}
-
-// CreateUser creates a new user.
-func (repo *UserRepositoryImpl) CreateUser(ctx context.Context, user *User) error {
-	query := `
-		INSERT INTO users (email, password, full_name)
-		VALUES ($1, $2, $3)
-		RETURNING id
-	`
-
-	hashedPassword, err := util.HashPassword(user.Password)
-	if err != nil {
-		return fmt.Errorf("failed to hash password: %w", err)
-	}
-
-	var userID uint64
-	err = repo.db.QueryRowContext(ctx, query, user.Email, hashedPassword, user.FullName).Scan(&userID)
-	if err != nil {
-		return fmt.Errorf("failed to create user: %w", err)
-	}
-
-	user.ID = userID
 	return nil
 }
 
-// UpdateUser updates a user.
-func (repo *UserRepositoryImpl) UpdateUser(ctx context.Context, user *User) error {
-	query := `
-		UPDATE users
-		SET email = $1, full_name = $2
-		WHERE id = $3
-	`
-
-	_, err := repo.db.ExecContext(ctx, query, user.Email, user.FullName, user.ID)
-	if err != nil {
-		return fmt.Errorf("failed to update user: %w", err)
+// Update updates an existing user in the database
+func (r *UserRepositoryImpl) Update(user *entity.User) error {
+	if err := r.db.Save(user).Error; err != nil {
+		return err
 	}
-
 	return nil
 }
 
-// DeleteUser deletes a user.
-func (repo *UserRepositoryImpl) DeleteUser(ctx context.Context, userID uint64) error {
-	query := `
-		DELETE FROM users
-		WHERE id = $1
-	`
-
-	_, err := repo.db.ExecContext(ctx, query, userID)
-	if err != nil {
-		return fmt.Errorf("failed to delete user: %w", err)
+// Delete deletes a user by ID from the database
+func (r *UserRepositoryImpl) Delete(userID string) error {
+	if err := r.db.Delete(&entity.User{}, "id = ?", userID).Error; err != nil {
+		return err
 	}
-
 	return nil
+}

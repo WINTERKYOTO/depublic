@@ -2,43 +2,60 @@ package common
 
 import (
 	"errors"
-	"fmt"
 	"time"
 
-	"github.com/dgrijalva/jwt-go"
+	"github.com/golang-jwt/jwt"
 )
 
-// SecretKey is the secret key used to sign and verify JWTs.
-var SecretKey = "my-secret-key"
+// JWTClaims is the claims of the JWT token
+type JWTClaims struct {
+	ID        int64     `json:"id"`
+	Username  string    `json:"username"`
+	Role      string    `json:"role"`
+	IssuedAt  time.Time `json:"issued_at"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
 
-// GenerateToken generates a new JWT with the specified claims.
-func GenerateToken(claims jwt.Claims) (string, error) {
+// Valid implements jwt.Claims.
+func (JWTClaims) Valid() error {
+	panic("unimplemented")
+}
+
+// GenerateToken generates a new JWT token
+func GenerateToken(claims JWTClaims) (string, error) {
+	// Create the token
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString([]byte(SecretKey))
+
+	// Sign the token
+	secret := []byte("secret")
+	tokenString, err := token.SignedString(secret)
 	if err != nil {
-		return "", fmt.Errorf("failed to generate token: %w", err)
+		return "", err
 	}
+
 	return tokenString, nil
 }
 
-// ParseToken parses a JWT and returns the claims.
-func ParseToken(tokenString string) (jwt.Claims, error) {
-	token, err := jwt.ParseWithClaims(tokenString, jwt.Claims{}, func(token *jwt.Token) (interface{}, error) {
-		return []byte(SecretKey), nil
+// ValidateToken validates a JWT token
+func ValidateToken(tokenString string) (*JWTClaims, error) {
+	// Parse the token
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		return []byte("secret"), nil
 	})
 	if err != nil {
-		if err == jwt.ErrSignatureInvalid {
-			return jwt.Claims{}, errors.New("invalid token signature")
-		}
-		return jwt.Claims{}, fmt.Errorf("failed to parse token: %w", err)
+		return nil, err
 	}
-	if !token.Valid {
-		return jwt.Claims{}, errors.New("invalid token")
-	}
-	return token.Claims, nil
-}
 
-// IsTokenExpired checks if a JWT is expired.
-func IsTokenExpired(claims jwt.Claims) bool {
-	return time.Now().UTC().After(claims.ExpiresAt)
+	// Check the token validity
+	if !token.Valid {
+		return nil, errors.New("invalid token")
+	}
+
+	// Get the claims
+	claims, ok := token.Claims.(*JWTClaims)
+	if !ok {
+		return nil, errors.New("invalid claims")
+	}
+
+	return claims, nil
 }
